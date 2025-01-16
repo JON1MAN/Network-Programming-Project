@@ -14,35 +14,18 @@ void handleClient(int client_socket) {
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
 
-    // Deklaracja zmiennej nickname
+    // Deklaracja zmiennej nickname poza blokiem
     std::string nickname;
 
     // Odczyt nicku gracza
     int valread = read(client_socket, buffer, BUFFER_SIZE);
-
     if (valread > 0) {
         buffer[valread] = '\0';
         nickname = buffer; // Zapis nicku do zmiennej
-        
-        //
-        // game.checkNickname(nickname);??
-        //
-        // if nickname already taken
-        // game.udpateSocket(nickname, client_socket);??
-        //
-        // if nickname free
-        // game.addUser(nickname, client_socket);???
-        // 
-        // 
-        //
-
         std::cout << "Dodano gracza: " << nickname << "\n";
 
-        // Wysyłanie odpowiedzi do klienta
         std::string message = "Nickname zaakceptowany!\n";
         send(client_socket, message.c_str(), message.size(), 0);
-
-
     }
     else {
         std::cerr << "Błąd odbioru danych od klienta\n";
@@ -52,17 +35,14 @@ void handleClient(int client_socket) {
 
     while (true) {
         // Wysyłanie wiadomości do klienta
-        std::string serverMessage = "To jest wiadomość z serwera\n";            //Do usunięcia potem
-        send(client_socket, serverMessage.c_str(), serverMessage.size(), 0);    //
+        std::string serverMessage = "To jest wiadomość z serwera\n";
+        send(client_socket, serverMessage.c_str(), serverMessage.size(), 0);
 
         // Odczyt danych od klienta
         memset(buffer, 0, BUFFER_SIZE);
         valread = read(client_socket, buffer, BUFFER_SIZE);
         if (valread > 0) {
             buffer[valread] = '\0';
-            //
-            // Wyświetlanie na serwerze co od kogo otrzymujemy
-            //
             std::cout << "Otrzymano od " << nickname << ": " << buffer << "\n";
         }
         else if (valread == 0) {
@@ -74,15 +54,6 @@ void handleClient(int client_socket) {
             break;
         }
 
-
-        /*
-        * game.checkMove(); ??
-        * 
-        * game.update();??
-        *
-        */
-
-
         sleep(1); // Krótkie opóźnienie dla symulacji
     }
 
@@ -93,12 +64,6 @@ void handleClient(int client_socket) {
 void handleZombieProcesses(int signal) {
     while (waitpid(-1, nullptr, WNOHANG) > 0);
 }
-
-
-
-
-//Start UDP aby klient mógł wysłac na broadcast zapytanie o ip serwera 
-//i połączyć sie TCP z serwerem
 
 void startUDPServer(int udp_fd) {
     struct sockaddr_in udp_address, client_addr;
@@ -127,8 +92,6 @@ void startUDPServer(int udp_fd) {
         }
     }
 }
-
-//==============================================================================
 
 int main() {
     signal(SIGCHLD, handleZombieProcesses);
@@ -193,12 +156,6 @@ int main() {
             perror("Accept failed");
             continue;
         }
-        //
-        // 
-        //game.addUser();???
-        //kojarzenie nickname i new_socket??
-        //
-        //
 
         std::cout << "Nowe połączenie od klienta " << inet_ntoa(client_address.sin_addr) << ":" << ntohs(client_address.sin_port) << "\n";
 
@@ -213,12 +170,6 @@ int main() {
         else {
             perror("Fork failed");
         }
-
-
-        while (true) {
-           
-        }
-
     }
 
     close(tcp_server_fd);
