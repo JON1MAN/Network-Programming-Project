@@ -5,10 +5,13 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <vector>
+
 
 #define TCP_PORT 8080
 #define UDP_PORT 9090
 #define BUFFER_SIZE 1024
+
 
 void handleClient(int client_socket) {
     char buffer[BUFFER_SIZE];
@@ -44,6 +47,13 @@ void handleClient(int client_socket) {
         if (valread > 0) {
             buffer[valread] = '\0';
             std::cout << "Otrzymano od " << nickname << ": " << buffer << "\n";
+            std::cout << buffer[0] << "\n";
+
+            if (buffer[0]>48&&buffer[0]<58) {
+                serverMessage = "Wykonałeś ruch\n";
+                send(client_socket, serverMessage.c_str(), serverMessage.size(), 0);
+                std::cout << "\nKlient wykonał ruch\n";
+            }
         }
         else if (valread == 0) {
             std::cout << "Klient " << nickname << " rozłączył się.\n";
@@ -53,6 +63,7 @@ void handleClient(int client_socket) {
             std::cerr << "Błąd odbioru danych od klienta\n";
             break;
         }
+        
 
         sleep(1); // Krótkie opóźnienie dla symulacji
     }
