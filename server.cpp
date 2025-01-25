@@ -23,12 +23,12 @@ std::vector<Player> players;
 std::mutex playerMutex;
 std::condition_variable playerCV;
 
-void handleClient(int client_socket) {
+std::string handleClient(int client_socket, std::vector<Player>& players) {
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
 
     // Deklaracja zmiennej nickname poza blokiem
-    std::string nickname;
+    std::string nickname = "";
 
     // Odczyt nicku gracza
     int valread = read(client_socket, buffer, BUFFER_SIZE);
@@ -45,47 +45,8 @@ void handleClient(int client_socket) {
         close(client_socket);
         exit(0);
     }
-
-    while (true) {
-        // Wysyłanie wiadomości do klienta
-        std::string serverMessage = "To jest wiadomość z serwera\n";
-        send(client_socket, serverMessage.c_str(), serverMessage.size(), 0);
-
-        // Odczyt danych od klienta
-        memset(buffer, 0, BUFFER_SIZE);
-        valread = read(client_socket, buffer, BUFFER_SIZE);
-        if (valread > 0) {
-            buffer[valread] = '\0';
-            std::cout << "Otrzymano od " << nickname << ": " << buffer << "\n";
-
-            //dodawanie gracza do gry
-            // {
-            //     // Add the player to the global list
-            //     std::unique_lock<std::mutex> lock(playerMutex);
-                
-            //     playerCV.notify_all();
-            // }
-            // {
-            //     std::unique_lock<std::mutex> lock(playerMutex);
-            //     playerCV.wait(lock, []() { return players.size() >= 2; });
-
-            // }
-
-            players.push_back(Player(client_socket, nickname));
-
-        }
-        else if (valread == 0) {
-            std::cout << "Klient " << nickname << " rozłączył się.\n";
-            break;
-        }
-        else {
-            std::cerr << "Błąd odbioru danych od klienta\n";
-            break;
-        }
-
-        sleep(1); // Krótkie opóźnienie dla symulacji
-    }
     exit(0);
+    return nickname;
 }
 
 
@@ -207,7 +168,11 @@ int main() {
         pid_t pid = fork();
         if (pid == 0) {
             close(tcp_server_fd);
-            handleClient(new_socket);
+            std::string nick = handleClient(new_socket, players);
+
+            if(!nick.empty()) {
+                players.push_back(Player(new_socket, nick));
+            }
         }
         else if (pid > 0) {
             close(new_socket);
