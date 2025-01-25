@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/wait.h>
-#include <csignal>
 
 #define TCP_PORT 8080
 #define UDP_PORT 9090
@@ -88,31 +87,10 @@ public:
         char buffer[BUFFER_SIZE] = { 0 };
         int valread = read(tcp_sock, buffer, BUFFER_SIZE);
         if (valread > 0) {
-            std::cout << "\nSerwer:\n" << buffer << std::endl;
+            std::cout << "Serwer: " << buffer << std::endl;
         }
         else {
             std::cerr << "Błąd odbioru danych od serwera\n";
-        }
-    }
-
-    void displayStatsAndStartGame() {
-        char buffer[BUFFER_SIZE];
-        while (true) {
-            memset(buffer, 0, BUFFER_SIZE);
-            std::cout << "Aby rozpocząć grę, wpisz 'start': ";
-            std::string input;
-            std::getline(std::cin, input);
-
-            if (input == "start") {
-                send(tcp_sock, input.c_str(), input.size(), 0);
-                int valread = read(tcp_sock, buffer, BUFFER_SIZE);
-                if (valread > 0) {
-                    std::cout << "\nSerwer:\n" << buffer << std::endl;
-                }
-                break;
-            } else {
-                std::cout << "Nieprawidłowa komenda. Wpisz 'start', aby rozpocząć grę.\n";
-            }
         }
     }
 
@@ -129,9 +107,11 @@ public:
             receiveFromServer();
         }
         else {
-            // Proces rodzicielski: wyświetlanie panelu statystyk i rozpoczęcie gry
-            displayStatsAndStartGame();
-
+            //
+            // 
+            // Proces rodzicielski: wysyłanie wiadomości do serwera
+            //
+            //
             while (true) {
                 std::string input;
                 std::getline(std::cin, input);
