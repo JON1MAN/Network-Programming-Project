@@ -3,56 +3,96 @@
 #include <cstring>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/wait.h>
-#include <signal.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <vector>
+#include <functional>
 
 #define TCP_PORT 8080
 #define UDP_PORT 9090
 #define BUFFER_SIZE 1024
 
 class Player {
-    public :
-        int socket;
-        std::string nickname;
+public:
+    int socket;
+    std::string nickname;
 
-    public:
-     Player(int s, std::string n) : socket(s), nickname(n) {}
+    Player(int s, std::string n) : socket(s), nickname(n) {}
 };
 
 std::vector<Player> players;
 std::mutex playerMutex;
 std::condition_variable playerCV;
 
-std::string handleClient(int client_socket, std::vector<Player>& players) {
+void handleClient(int client_socket) {
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
 
-    // Deklaracja zmiennej nickname poza blokiem
-    std::string nickname = "";
+    std::string nickname;
 
-    // Odczyt nicku gracza
+    // Read nickname from the client
     int valread = read(client_socket, buffer, BUFFER_SIZE);
     if (valread > 0) {
         buffer[valread] = '\0';
-        nickname = buffer; // Zapis nicku do zmiennej
-        std::cout << "Dodano gracza: " << nickname << "\n";
+        nickname = buffer;
+        std::cout << "Added player: " << nickname << "\n";
 
-        std::string message = "Nickname zaakceptowany!\n";
+        std::string message = "Nickname accepted!\n";
         send(client_socket, message.c_str(), message.size(), 0);
-    }
-    else {
-        std::cerr << "Błąd odbioru danych od klienta\n";
+
+    } else {
+        std::cerr << "Error receiving data from client\n";
         close(client_socket);
-        exit(0);
+        return;
     }
-    exit(0);
-    return nickname;
-}
 
+    std::string clientMessage;
+    valread = read(client_socket, buffer, BUFFER_SIZE);
+    if (valread > 0) {
+        buffer[valread] = '\0';
+        clientMessage = buffer;
+        if (clientMessage == "start" && players.size() < 2)
+        {
+            std::cout << "Player : " << nickname << "wants to start game!" <<"\n";
+            std::string message;
+    
+            // Add player to the list
+            {
+                std::lock_guard<std::mutex> lock(playerMutex);
+                players.emplace_back(client_socket, nickname);
+            }
+            // Notify that a new player is added
+            playerCV.notify_all();
 
+            std::cout << "Game lobby has: " << players.size() << " players \n";
 
-void handleZombieProcesses(int signal) {
-    while (waitpid(-1, nullptr, WNOHANG) > 0);
+            if (players.size() == 2)
+            {
+                std::cout << "All players connected\n";
+                message = "All players connected, starting game...\n";
+                for (size_t i = 0; i < players.size(); i++)
+                {
+                    send(players[i].socket, message.c_str(), message.size(), 0);
+                } 
+            } else {
+                std::string message = "Wainting for another player...\n";
+                send(client_socket, message.c_str(), message.size(), 0);
+            }
+            
+            
+        } else {
+            close(client_socket);
+            return;
+        }
+        
+    } else {
+        std::cerr << "Error receiving data from client\n";
+        close(client_socket);
+        return;
+    }
+
+    // Additional handling (game logic, etc.) can go here
 }
 
 void startUDPServer(int udp_fd) {
@@ -70,13 +110,13 @@ void startUDPServer(int udp_fd) {
         exit(EXIT_FAILURE);
     }
 
-    std::cout << "Serwer UDP nasłuchuje na porcie " << UDP_PORT << "...\n";
+    std::cout << "UDP server listening on port " << UDP_PORT << "...\n";
 
     while (true) {
         memset(buffer, 0, BUFFER_SIZE);
         int len = recvfrom(udp_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, &client_len);
         if (len > 0) {
-            std::cout << "Otrzymano zapytanie broadcastowe od " << inet_ntoa(client_addr.sin_addr) << "\n";
+            std::cout << "Received broadcast request from " << inet_ntoa(client_addr.sin_addr) << "\n";
             std::string response = "ACK";
             sendto(udp_fd, response.c_str(), response.size(), 0, (struct sockaddr*)&client_addr, client_len);
         }
@@ -84,8 +124,6 @@ void startUDPServer(int udp_fd) {
 }
 
 int main() {
-    signal(SIGCHLD, handleZombieProcesses);
-
     int tcp_server_fd;
     struct sockaddr_in tcp_address;
 
@@ -117,7 +155,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    std::cout << "Serwer TCP nasłuchuje na porcie " << TCP_PORT << "...\n";
+    std::cout << "TCP server listening on port " << TCP_PORT << "...\n";
 
     int udp_fd;
     if ((udp_fd = socket(AF_INET, SOCK_DGRAM, 0)) == 0) {
@@ -125,17 +163,10 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    pid_t udp_process = fork();
-    if (udp_process == 0) {
+    std::thread udpThread([udp_fd]() {
         startUDPServer(udp_fd);
-        exit(0);
-    }
-    else if (udp_process < 0) {
-        perror("Fork failed for UDP server");
-        close(udp_fd);
-        close(tcp_server_fd);
-        exit(EXIT_FAILURE);
-    }
+    });
+    udpThread.detach();
 
     while (true) {
         struct sockaddr_in client_address;
@@ -147,39 +178,13 @@ int main() {
             continue;
         }
 
-        if (players.size() == 2) {
-            int player1Socket = players[0].socket;
-            int player2Socket = players[1].socket;
+        std::cout << "New connection from client " << inet_ntoa(client_address.sin_addr) << ":" << ntohs(client_address.sin_port) << "\n";
 
-            std::string messageToPlayer1 = "Game started! You are 'X'. Your opponent is: " + players[1].nickname + "\n";
-            std::string messageToPlayer2 = "Game started! You are 'O'. Your opponent is: " + players[0].nickname + "\n";
-
-            send(player1Socket, messageToPlayer1.c_str(), messageToPlayer1.size(), 0);
-            send(player2Socket, messageToPlayer2.c_str(), messageToPlayer2.size(), 0);
-
-            // Remove players from the list after starting the game
-            close(players[0].socket);
-            close(players[1].socket);
-            players.clear();
-        }
-
-        std::cout << "Nowe połączenie od klienta " << inet_ntoa(client_address.sin_addr) << ":" << ntohs(client_address.sin_port) << "\n";
-
-        pid_t pid = fork();
-        if (pid == 0) {
-            close(tcp_server_fd);
-            std::string nick = handleClient(new_socket, players);
-
-            if(!nick.empty()) {
-                players.push_back(Player(new_socket, nick));
-            }
-        }
-        else if (pid > 0) {
-            close(new_socket);
-        }
-        else {
-            perror("Fork failed");
-        }
+        // Spawn a new thread to handle the client
+        std::thread clientThread([new_socket]() {
+            handleClient(new_socket);
+        });
+        clientThread.detach();
     }
 
     close(tcp_server_fd);
