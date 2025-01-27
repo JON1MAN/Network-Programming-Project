@@ -17,13 +17,77 @@ class Player {
 public:
     int socket;
     std::string nickname;
-
+    
     Player(int s, std::string n) : socket(s), nickname(n) {}
 };
 
 std::vector<Player> players;
 std::mutex playerMutex;
 std::condition_variable playerCV;
+void handleGame(Player p1, Player p2) {
+    std::string message = "All players connected, starting game...\n";
+    send(p1.socket, message.c_str(), message.size(), 0);
+    send(p2.socket, message.c_str(), message.size(), 0);
+    message = "Closing game...\n";
+    send(p1.socket, message.c_str(), message.size(), 0);
+    send(p2.socket, message.c_str(), message.size(), 0);
+    close(p1.socket);
+    close(p2.socket);
+
+}
+void handleClientCommunication(int client_socket, std::string nickname) {
+    char buffer[BUFFER_SIZE];
+    memset(buffer, 0, BUFFER_SIZE);
+    std::string clientMessage;
+    int valread = read(client_socket, buffer, BUFFER_SIZE);
+    if (valread > 0) {
+        buffer[valread] = '\0';
+        clientMessage = buffer;
+        if (clientMessage == "1")
+        {
+            std::cout << "Player : " << nickname << "wants to start game!" << "\n";
+            std::string message;
+
+            // Add player to the list
+            {
+                std::lock_guard<std::mutex> lock(playerMutex);
+                players.emplace_back(client_socket, nickname);
+            }
+            // Notify that a new player is added
+            playerCV.notify_all();
+
+            std::cout << "Game lobby has: " << players.size() << " players \n";
+
+            if (players.size() % 2 == 0)
+            {
+                std::cout << "\nAll players connected\n\n";
+                message = "All players connected, starting game...\n";
+                std::thread gameThread([players]() {
+                    handleGame(players[players.size()-1],players[players.size()-2]);
+                    });
+                gameThread.detach();
+
+            }
+            else {
+                std::string message = "Waiting for another player...\n";
+                send(client_socket, message.c_str(), message.size(), 0);
+            }
+
+
+        }
+        else {
+            close(client_socket);
+            return;
+        }
+
+    }
+    else {
+        std::cerr << "Error receiving data from client\n";
+        close(client_socket);
+        return;
+    }
+
+}
 
 void handleClient(int client_socket) {
     char buffer[BUFFER_SIZE];
@@ -47,53 +111,11 @@ void handleClient(int client_socket) {
         return;
     }
 
-    std::string clientMessage;
-    valread = read(client_socket, buffer, BUFFER_SIZE);
-    if (valread > 0) {
-        buffer[valread] = '\0';
-        clientMessage = buffer;
-        if (clientMessage == "start" && players.size() < 2)
-        {
-            std::cout << "Player : " << nickname << "wants to start game!" <<"\n";
-            std::string message;
-    
-            // Add player to the list
-            {
-                std::lock_guard<std::mutex> lock(playerMutex);
-                players.emplace_back(client_socket, nickname);
-            }
-            // Notify that a new player is added
-            playerCV.notify_all();
-
-            std::cout << "Game lobby has: " << players.size() << " players \n";
-
-            if (players.size() == 2)
-            {
-                std::cout << "All players connected\n";
-                message = "All players connected, starting game...\n";
-                for (size_t i = 0; i < players.size(); i++)
-                {
-                    send(players[i].socket, message.c_str(), message.size(), 0);
-                } 
-            } else {
-                std::string message = "Wainting for another player...\n";
-                send(client_socket, message.c_str(), message.size(), 0);
-            }
-            
-            
-        } else {
-            close(client_socket);
-            return;
-        }
-        
-    } else {
-        std::cerr << "Error receiving data from client\n";
-        close(client_socket);
-        return;
-    }
+    handleClientCommunication(client_socket, nickname);
 
     // Additional handling (game logic, etc.) can go here
 }
+
 
 void startUDPServer(int udp_fd) {
     struct sockaddr_in udp_address, client_addr;
