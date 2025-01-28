@@ -21,14 +21,14 @@ private:
             memset(buffer, 0, BUFFER_SIZE);
             int valread = read(tcp_sock, buffer, BUFFER_SIZE);
             if (valread > 0) {
-                std::cout << "\nSerwer:\n" << buffer << std::endl;
+                std::cout << "\nServer:\n" << buffer << std::endl;
             }
             else if (valread == 0) {
-                std::cout << "Serwer zakończył połączenie.\n";
+                std::cout << "Serwer closed connection.\n";
                 return 1;
             }
             else {
-                std::cerr << "Błąd odbioru danych z serwera\n";
+                std::cerr << "Error receiving data.\n";
                 break;
             }
         }
@@ -76,7 +76,7 @@ public:
             int recv_len = recvfrom(udp_sock, buffer, BUFFER_SIZE, 0,
                 (struct sockaddr*)&server_response, &server_len);
             if (recv_len > 0) {
-                std::cout << "Otrzymano odpowiedź od serwera: " << inet_ntoa(server_response.sin_addr) << "\n";
+                std::cout << "Received response from server: " << inet_ntoa(server_response.sin_addr) << "\n";
                 server_address.sin_family = AF_INET;
                 server_address.sin_port = htons(TCP_PORT);
                 server_address.sin_addr = server_response.sin_addr;
@@ -84,12 +84,12 @@ public:
                 break;
             }
             else {
-                std::cout << "Brak odpowiedzi od serwera. Próba " << (attempt + 1) << " z " << max_retries << ".\n";
+                std::cout << "No response from server. Try " << (attempt + 1) << " out of " << max_retries << ".\n";
             }
         }
 
         if (!server_found) {
-            std::cerr << "Nie znaleziono serwera po " << max_retries << " próbach. Kończę działanie.\n";
+            std::cerr << "Server not found after " << max_retries << " tries. Closing program.\n";
             exit(EXIT_FAILURE);
         }
 
@@ -117,10 +117,10 @@ public:
         char buffer[BUFFER_SIZE] = { 0 };
         int valread = read(tcp_sock, buffer, BUFFER_SIZE);
         if (valread > 0) {
-            std::cout << "Serwer: " << buffer << std::endl;
+            std::cout << "Server:\n" << buffer << std::endl;
         }
         else {
-            std::cerr << "Błąd odbioru danych od serwera\n";
+            std::cerr << "Error receiving data\n";
         }
     }
 
@@ -135,33 +135,31 @@ public:
         if (pid == 0) {
             // Proces potomny: odbieranie wiadomości od serwera
             if (receiveFromServer()) {
-                std::cout << "Kończę połączenie...\n";
+                std::cout << "Closing connection...\n";
                 kill(pid, SIGKILL); // Zakończ proces potomny
             }
         }
         else {
-            //
-            // Proces rodzicielski: wysyłanie wiadomości do serwera
-            //
-            while (true) {
+                // Proces rodzicielski: wysyłanie wiadomości do serwera
                 std::string input;
                 std::getline(std::cin, input);
 
                 // client can send only exit or numer 1-9
                 if (input == "exit") {
-                    std::cout << "Kończę połączenie...\n";
+                    std::cout << "Closing connection...\n";
                     kill(pid, SIGKILL); // Zakończ proces potomny
-                    break;
                 }
                 else if (input[0]>48&&input[0]<58&&input.size() == 1) {
                     send(tcp_sock, input.c_str(), input.size(), 0);
+                } else {
+                    std::cout << "Wrong input\n";
                 }
             }
 
             waitpid(pid, nullptr, 0);
 
         }
-    }
+
 
     ~Client() {
         close(tcp_sock);
@@ -173,7 +171,7 @@ int main() {
     Client client;
 
     std::string nickname;
-    std::cout << "Podaj swój nickname: ";
+    std::cout << "Enter your nickname: ";
     std::getline(std::cin, nickname);
 
     client.sendNickname(nickname);
