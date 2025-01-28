@@ -55,7 +55,7 @@ public:
         udp_address.sin_addr.s_addr = inet_addr(BROADCAST_IP);
 
         const int max_retries = 5;
-        const int retry_interval = 2; // Czas w sekundach między próbami
+        const int retry_interval = 2;
         bool server_found = false;
 
         for (int attempt = 0; attempt < max_retries; ++attempt) {
@@ -67,7 +67,7 @@ public:
             struct sockaddr_in server_response;
             socklen_t server_len = sizeof(server_response);
 
-            // Ustaw timeout na gniazdo UDP
+            // Set timeout
             struct timeval tv;
             tv.tv_sec = retry_interval;
             tv.tv_usec = 0;
@@ -133,21 +133,21 @@ public:
         }
 
         if (pid == 0) {
-            // Proces potomny: odbieranie wiadomości od serwera
+
             if (receiveFromServer()) {
                 std::cout << "Closing connection...\n";
-                kill(pid, SIGKILL); // Zakończ proces potomny
+                kill(pid, SIGKILL);
             }
         }
         else {
-                // Proces rodzicielski: wysyłanie wiadomości do serwera
+
                 std::string input;
                 std::getline(std::cin, input);
 
                 // client can send only exit or numer 1-9
                 if (input == "exit") {
                     std::cout << "Closing connection...\n";
-                    kill(pid, SIGKILL); // Zakończ proces potomny
+                    kill(pid, SIGKILL); 
                 }
                 else if (input[0]>48&&input[0]<58&&input.size() == 1) {
                     send(tcp_sock, input.c_str(), input.size(), 0);
