@@ -8,33 +8,31 @@
 #include <condition_variable>
 #include <vector>
 #include <functional>
+#include "game.hpp"
 
 #define TCP_PORT 8080
 #define UDP_PORT 9090
 #define BUFFER_SIZE 1024
 
-class Player {
-public:
-    int socket;
-    std::string nickname;
-    
-    Player(int s, std::string n) : socket(s), nickname(n) {}
-};
-
 std::vector<Player> players;
 std::mutex playerMutex;
 std::condition_variable playerCV;
+
 void handleGame(Player p1, Player p2) {
     std::string message = "All players connected, starting game...\n";
     send(p1.socket, message.c_str(), message.size(), 0);
     send(p2.socket, message.c_str(), message.size(), 0);
+
+    TicTacToeGame game(p1, p2);
+    game.run();
+
     message = "Closing game...\n";
     send(p1.socket, message.c_str(), message.size(), 0);
     send(p2.socket, message.c_str(), message.size(), 0);
     close(p1.socket);
     close(p2.socket);
-
 }
+
 void handleClientCommunication(int client_socket, std::string nickname) {
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
@@ -62,9 +60,19 @@ void handleClientCommunication(int client_socket, std::string nickname) {
             {
                 std::cout << "\nAll players connected\n\n";
                 message = "All players connected, starting game...\n";
-                std::thread gameThread([players]() {
-                    handleGame(players[players.size()-1],players[players.size()-2]);
-                    });
+                // Move the last two players to local variables.
+                auto p1 = std::move(players.back());
+                players.pop_back();
+                auto p2 = std::move(players.back());
+                players.pop_back();
+
+                // Now clear the original vector.
+                players.clear();
+
+                // Capture p1 and p2 by copy in the thread's lambda.
+                std::thread gameThread([p1, p2]() mutable {
+                    handleGame(p1, p2);
+                });
                 gameThread.detach();
 
             }
