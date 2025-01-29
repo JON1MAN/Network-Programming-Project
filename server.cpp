@@ -18,33 +18,55 @@ std::vector<Player> players;
 std::mutex playerMutex;
 std::condition_variable playerCV;
 
+Ranking ranking;
+
+void handleClientCommunication(int client_socket, std::string nickname);
+
 void handleGame(Player p1, Player p2) {
     std::string message = "All players connected, starting game...\n";
     send(p1.socket, message.c_str(), message.size(), 0);
     send(p2.socket, message.c_str(), message.size(), 0);
 
-    TicTacToeGame game(p1, p2);
+    TicTacToeGame game(p1, p2, ranking);
     game.run();
 
-    message = "Closing game...\n";
-    send(p1.socket, message.c_str(), message.size(), 0);
-    send(p2.socket, message.c_str(), message.size(), 0);
-    close(p1.socket);
-    close(p2.socket);
+    std::thread client1Thread([p1]() {
+        handleClientCommunication(p1.socket,p1.nickname);
+        });
+    client1Thread.detach();
+
+    std::thread client2Thread([p2]() {
+        handleClientCommunication(p2.socket,p2.nickname);
+        });
+    client2Thread.detach();
+}
+void sendRanking(int socket, std::string nickname) {
+    std::string message = ranking.printRanking();
+    send(socket, message.c_str(), message.size(), 0);
+    std::thread client1Thread([socket,nickname]() {
+        handleClientCommunication(socket, nickname);
+        });
+    client1Thread.detach();
 }
 
 void handleClientCommunication(int client_socket, std::string nickname) {
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
     std::string clientMessage;
+    std::string message;
+
+    message = "Welcome to the game!\n1.Start game\n2.Check ranking\n3.Exit\n";
+    send(client_socket, message.c_str(), message.size(), 0);
+
+
     int valread = read(client_socket, buffer, BUFFER_SIZE);
     if (valread > 0) {
         buffer[valread] = '\0';
         clientMessage = buffer;
         if (clientMessage == "1")
         {
-            std::cout << "Player : " << nickname << "wants to start game!" << "\n";
-            std::string message;
+            std::cout << "Player : " << nickname << " wants to start game!" << "\n";
+            
 
             // Add player to the list
             {
@@ -77,13 +99,15 @@ void handleClientCommunication(int client_socket, std::string nickname) {
 
             }
             else {
-                std::string message = "Waiting for another player...\n";
+                message = "Waiting for another player...\n";
                 send(client_socket, message.c_str(), message.size(), 0);
             }
 
 
         }
-        else {
+        else if(clientMessage=="2"){
+            sendRanking(client_socket,nickname);
+        } else {
             close(client_socket);
             return;
         }
@@ -109,7 +133,7 @@ void handleClient(int client_socket) {
         buffer[valread] = '\0';
         nickname = buffer;
         std::cout << "Added player: " << nickname << "\n";
-
+        ranking.addPlayer(nickname);
         std::string message = "Nickname accepted!\n";
         send(client_socket, message.c_str(), message.size(), 0);
 
@@ -121,7 +145,6 @@ void handleClient(int client_socket) {
 
     handleClientCommunication(client_socket, nickname);
 
-    // Additional handling (game logic, etc.) can go here
 }
 
 

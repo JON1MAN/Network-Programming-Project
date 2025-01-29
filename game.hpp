@@ -2,17 +2,17 @@
 #define GAME_HPP
 
 #include <iostream>
-#include <string>
+#include <cstring>
 #include <vector>
 #include <unistd.h>     // for close()
 #include <sys/socket.h> // for send(), recv()
 #include "player.hpp"
-
+#include "ranking.hpp"
 
 class TicTacToeGame {
 public:
-    TicTacToeGame(Player p1, Player p2)
-        : player1_(p1), player2_(p2)
+    TicTacToeGame(Player p1, Player p2, Ranking& ranking)
+        : player1_(p1), player2_(p2) , ranking_(ranking)
     {
         // Initialize the board with empty spaces
         board_.assign(9, ' ');
@@ -41,7 +41,7 @@ public:
 
             
             // Ask current player to make a move
-            sendToPlayer(currentPlayer, "Your move (1-9): ");
+            sendToPlayer(currentPlayer, "Your move " +currentPlayer.nickname+ " (1 - 9) : ");
 
             // Read move
             int chosenPos = getMoveFromPlayer(currentPlayer);
@@ -70,6 +70,7 @@ public:
             if (checkWinner(currentMark)) {
                 std::string winMsg = "Player [" + currentPlayer.nickname 
                                      + "] (" + currentMark + ") wins!\n";
+                ranking_.addWin(currentPlayer.nickname);
                 sendToPlayer(player1_, winMsg);
                 sendToPlayer(player2_, winMsg);
                 gameRunning = false;
@@ -90,6 +91,7 @@ private:
     Player player1_;
     Player player2_;
     std::vector<char> board_; // 9 cells representing the tic-tac-toe board
+    Ranking& ranking_;
 
     // Helper function to send a string message to a specific player
     void sendToPlayer(const Player& player, const std::string& message) {
@@ -148,7 +150,6 @@ private:
             {
                 result += " ";
             }
-            
             result.push_back(board_[i] == ' ' ? ' ' : board_[i]);
             if ((i + 1) % 3 == 0 && i < 8) {
                 result += (i == 2 || i == 5) ? "\n---+---+---\n" : "\n";
