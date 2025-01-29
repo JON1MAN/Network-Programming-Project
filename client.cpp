@@ -141,24 +141,28 @@ public:
         }
         else {
 
+            while (true) {
                 std::string input;
                 std::getline(std::cin, input);
 
                 // client can send only exit or numer 1-9
                 if (input == "exit") {
                     std::cout << "Closing connection...\n";
-                    kill(pid, SIGKILL); 
+                    kill(pid, SIGKILL);
                 }
-                else if (input[0]>48&&input[0]<58&&input.size() == 1) {
+                else if (input[0] > 48 && input[0] < 58 && input.size() == 1) {
                     send(tcp_sock, input.c_str(), input.size(), 0);
-                } else {
+                }
+                else {
                     std::cout << "Wrong input\n";
                 }
             }
-
             waitpid(pid, nullptr, 0);
-
         }
+
+            
+
+    }
 
 
     ~Client() {
