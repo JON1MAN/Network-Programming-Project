@@ -108,7 +108,7 @@ class Ranking {
                 points[i] = wins[i] * 3 + draws[i];
                 games[i] = wins[i] + loses[i] + draws[i];
                 if (games[i] > 0) {
-                    winRatio[i] = (wins[i] / games[i]) * 100;
+                    winRatio[i] = (static_cast<float>(wins[i]) / games[i]) * 100.0f;
                 }
             }
         }
