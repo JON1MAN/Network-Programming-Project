@@ -26,10 +26,12 @@ public:
         char p2Mark = 'X';
 
         // Inform the players of their marks
-        sendToPlayer(player1_, "You are 'O'. You move first.\n");
-        sendToPlayer(player2_, "You are 'X'. You move second.\n");
+        
         broadcastBoard();
 
+        sendToPlayer(player1_, "You are 'O'. You move first.\n");
+        sendToPlayer(player2_, "You are 'X'. You move second.\n");
+        
         // Game loop
         bool gameRunning = true;
         int currentTurn = 0;  // 0 for player1_, 1 for player2_
@@ -37,18 +39,23 @@ public:
         while (gameRunning) {
             // Current player's mark and socket
             Player& currentPlayer = (currentTurn == 0) ? player1_ : player2_;
+            Player& secondPlayer = (currentTurn == 0) ? player2_ : player1_;
             char currentMark = (currentTurn == 0) ? p1Mark : p2Mark;
 
             
             // Ask current player to make a move
             sendToPlayer(currentPlayer, "Your move " +currentPlayer.nickname+ " (1 - 9) : ");
+            sendToPlayer(secondPlayer, "Player " + currentPlayer.nickname + " makes move. ");
 
             // Read move
             int chosenPos = getMoveFromPlayer(currentPlayer);
             if (chosenPos == -1) {
+                std::cout << "Communication error. Closing game.\n";
                 // If there's an error in reading, let's close the game.
                 sendToPlayer(player1_, "Communication error. Closing game.\n");
                 sendToPlayer(player2_, "Communication error. Closing game.\n");
+                ranking_.disconnectPlayer(player1_.nickname);
+                ranking_.disconnectPlayer(player2_.nickname);
                 break;
             }
 
@@ -68,15 +75,18 @@ public:
 
             // Check winner
             if (checkWinner(currentMark)) {
-                std::string winMsg = "Player [" + currentPlayer.nickname 
-                                     + "] (" + currentMark + ") wins!\n";
+                std::string winMsg = "Player " + currentPlayer.nickname 
+                                     + " (" + currentMark + ") wins!\n";
                 ranking_.addWin(currentPlayer.nickname);
+                ranking_.addLose(secondPlayer.nickname);
                 sendToPlayer(player1_, winMsg);
                 sendToPlayer(player2_, winMsg);
                 gameRunning = false;
             } 
             else if (checkDraw()) {
                 std::string drawMsg = "It's a draw!\n";
+                ranking_.addDraw(player1_.nickname);
+                ranking_.addDraw(player2_.nickname);
                 sendToPlayer(player1_, drawMsg);
                 sendToPlayer(player2_, drawMsg);
                 gameRunning = false;
@@ -144,7 +154,7 @@ private:
         //  7 | 8 | 9
         //
         // Replaced by the actual X/O or ' ' in each position
-        std::string result;
+        std::string result = "\n";
         for (int i = 0; i < 9; i++) {
             if ( i == 0 || i == 3 || i == 6)
             {

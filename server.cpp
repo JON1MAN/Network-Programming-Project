@@ -40,33 +40,60 @@ void handleGame(Player p1, Player p2) {
         });
     client2Thread.detach();
 }
+
 void sendRanking(int socket, std::string nickname) {
     std::string message = ranking.printRanking();
     send(socket, message.c_str(), message.size(), 0);
-    std::thread client1Thread([socket,nickname]() {
+    std::thread clientThread([socket, nickname]() {
         handleClientCommunication(socket, nickname);
         });
-    client1Thread.detach();
+    clientThread.detach();
+}
+
+void sendOnline(int socket, std::string nickname) {
+    std::string message = ranking.printOnline();
+    send(socket, message.c_str(), message.size(), 0);
+    std::thread clientThread([socket, nickname]() {
+        handleClientCommunication(socket, nickname);
+        });
+    clientThread.detach();
+}
+
+void sendLobby(int socket, std::string nickname) {
+    std::string message;
+    if (players.size() > 0) {
+        message = "\nPlayer in lobby: ";
+        message += players[0].nickname;
+        message += "\n\n";
+    }
+    else {
+        message = "\nLobby is empty.\n\n";
+    }
+    send(socket, message.c_str(), message.size(), 0);
+    std::thread clientThread([socket, nickname]() {
+        handleClientCommunication(socket, nickname);
+        });
+    clientThread.detach();
 }
 
 void handleClientCommunication(int client_socket, std::string nickname) {
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
     std::string clientMessage;
-    std::string message;
-
-    message = "Welcome to the game!\n1.Start game\n2.Check ranking\n3.Exit\n";
+    
+    std::string message = "Welcome to the game!\n1.Start game\n2.Check ranking\n3.Check online players\n4.Check lobby\n5.exit\n";
     send(client_socket, message.c_str(), message.size(), 0);
 
 
-    int valread = read(client_socket, buffer, BUFFER_SIZE);
+    int valread; valread = read(client_socket, buffer, BUFFER_SIZE);
     if (valread > 0) {
         buffer[valread] = '\0';
         clientMessage = buffer;
+        std::cout << "Player : " << nickname << " sends: " << clientMessage << "\n";
         if (clientMessage == "1")
         {
             std::cout << "Player : " << nickname << " wants to start game!" << "\n";
-            
+
 
             // Add player to the list
             {
@@ -94,21 +121,30 @@ void handleClientCommunication(int client_socket, std::string nickname) {
                 // Capture p1 and p2 by copy in the thread's lambda.
                 std::thread gameThread([p1, p2]() mutable {
                     handleGame(p1, p2);
-                });
+                    });
                 gameThread.detach();
 
             }
             else {
-                message = "Waiting for another player...\n";
+                message = "\nWaiting for another player...\n\n";
                 send(client_socket, message.c_str(), message.size(), 0);
             }
 
 
         }
-        else if(clientMessage=="2"){
-            sendRanking(client_socket,nickname);
-        } else {
+        else if (clientMessage == "2") {
+            sendRanking(client_socket, nickname);
+        }
+        else if (clientMessage == "3") {
+            sendOnline(client_socket, nickname);
+        }
+        else if (clientMessage == "4") {
+            sendLobby(client_socket, nickname);
+        }
+        else {
+            std::cout << "Disconnecting player:" << nickname << "\n";
             close(client_socket);
+            ranking.disconnectPlayer(nickname);
             return;
         }
 
@@ -116,6 +152,7 @@ void handleClientCommunication(int client_socket, std::string nickname) {
     else {
         std::cerr << "Error receiving data from client\n";
         close(client_socket);
+        ranking.disconnectPlayer(nickname);
         return;
     }
 
@@ -126,21 +163,32 @@ void handleClient(int client_socket) {
     memset(buffer, 0, BUFFER_SIZE);
 
     std::string nickname;
-
+    std::string message;
+    bool nicknameAccepted = 0;
+    int valread;
     // Read nickname from the client
-    int valread = read(client_socket, buffer, BUFFER_SIZE);
-    if (valread > 0) {
-        buffer[valread] = '\0';
-        nickname = buffer;
-        std::cout << "Added player: " << nickname << "\n";
-        ranking.addPlayer(nickname);
-        std::string message = "Nickname accepted!\n";
-        send(client_socket, message.c_str(), message.size(), 0);
+    while (!nicknameAccepted) {
+        valread = read(client_socket, buffer, BUFFER_SIZE);
+        if (valread > 0) {
+            buffer[valread] = '\0';
+            nickname = buffer;
+            if (ranking.addPlayer(nickname) >= 0) {
+                std::cout << "Added player: " << nickname << "\n";
+                message = "\nNickname accepted!\n\n";
+                send(client_socket, message.c_str(), message.size(), 0);
+                nicknameAccepted = 1;
 
-    } else {
-        std::cerr << "Error receiving data from client\n";
-        close(client_socket);
-        return;
+            }
+            else {
+                message = "Nickname not accepted!\nTry again:";
+                send(client_socket, message.c_str(), message.size(), 0);
+            }
+        }
+        else {
+            std::cerr << "Error receiving data from client\n";
+            close(client_socket);
+            return;
+        }
     }
 
     handleClientCommunication(client_socket, nickname);
@@ -177,6 +225,7 @@ void startUDPServer(int udp_fd) {
 }
 
 int main() {
+
     int tcp_server_fd;
     struct sockaddr_in tcp_address;
 

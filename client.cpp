@@ -1,4 +1,4 @@
-﻿#include <iostream>
+﻿﻿#include <iostream>
 #include <string>
 #include <cstring>
 #include <unistd.h>
@@ -15,24 +15,24 @@ private:
     int tcp_sock, udp_sock;
     struct sockaddr_in server_address, udp_address;
 
-    void receiveFromServer() {
+    bool receiveFromServer() {
         char buffer[BUFFER_SIZE];
         while (true) {
             memset(buffer, 0, BUFFER_SIZE);
             int valread = read(tcp_sock, buffer, BUFFER_SIZE);
             if (valread > 0) {
-                std::cout << "\nSerwer:\n" << buffer << std::endl;
+                std::cout << buffer << std::endl;
             }
             else if (valread == 0) {
-                std::cout << "Serwer zakończył połączenie.\n";
-                break;
+                std::cout << "Server closed connection.\n";
+                return 1;
             }
             else {
-                std::cerr << "Błąd odbioru danych z serwera\n";
+                std::cerr << "Error receiving data.\n";
                 break;
             }
         }
-        exit(0); // Zakończ proces odbierający
+        return 0;
     }
 
 public:
@@ -54,17 +54,47 @@ public:
         udp_address.sin_port = htons(UDP_PORT);
         udp_address.sin_addr.s_addr = inet_addr(BROADCAST_IP);
 
-        // Send broadcast
-        std::string broadcast_message = "DISCOVER_SERVER";
-        sendto(udp_sock, broadcast_message.c_str(), broadcast_message.size(), 0,
-            (struct sockaddr*)&udp_address, sizeof(udp_address));
+        const int max_retries = 5;
+        const int retry_interval = 2;
+        bool server_found = false;
 
-        // Receive response
-        char buffer[BUFFER_SIZE];
-        struct sockaddr_in server_response;
-        socklen_t server_len = sizeof(server_response);
-        recvfrom(udp_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&server_response, &server_len);
-        std::cout << "Otrzymano odpowiedź od serwera: " << inet_ntoa(server_response.sin_addr) << "\n";
+        for (int attempt = 0; attempt < max_retries; ++attempt) {
+            std::string broadcast_message = "DISCOVER_SERVER";
+            sendto(udp_sock, broadcast_message.c_str(), broadcast_message.size(), 0,
+                (struct sockaddr*)&udp_address, sizeof(udp_address));
+
+            char buffer[BUFFER_SIZE];
+            struct sockaddr_in server_response;
+            socklen_t server_len = sizeof(server_response);
+
+            // Set timeout
+            struct timeval tv;
+            tv.tv_sec = retry_interval;
+            tv.tv_usec = 0;
+            setsockopt(udp_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+            int recv_len = recvfrom(udp_sock, buffer, BUFFER_SIZE, 0,
+                (struct sockaddr*)&server_response, &server_len);
+            if (recv_len > 0) {
+                std::cout << "Received response from server: " << inet_ntoa(server_response.sin_addr) << "\n";
+                server_address.sin_family = AF_INET;
+                server_address.sin_port = htons(TCP_PORT);
+                server_address.sin_addr = server_response.sin_addr;
+                server_found = true;
+                break;
+            }
+            else {
+                std::cout << "No response from server. Try " << (attempt + 1) << " out of " << max_retries << ".\n";
+            }
+        }
+
+        if (!server_found) {
+            std::cerr << "Server not found after " << max_retries << " tries. Closing program.\n";
+            exit(EXIT_FAILURE);
+        }
+
+
+
 
         // Setup TCP connection
         if ((tcp_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -74,7 +104,7 @@ public:
 
         server_address.sin_family = AF_INET;
         server_address.sin_port = htons(TCP_PORT);
-        server_address.sin_addr = server_response.sin_addr;
+        server_address.sin_addr = server_address.sin_addr;
 
         if (connect(tcp_sock, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
             perror("Connection failed");
@@ -87,47 +117,45 @@ public:
         char buffer[BUFFER_SIZE] = { 0 };
         int valread = read(tcp_sock, buffer, BUFFER_SIZE);
         if (valread > 0) {
-            std::cout << "Serwer: " << buffer << std::endl;
+            std::cout << buffer << std::endl;
         }
         else {
-            std::cerr << "Błąd odbioru danych od serwera\n";
+            std::cerr << "Error receiving data\n";
         }
     }
 
     void startCommunication() {
         pid_t pid = fork();
-
         if (pid < 0) {
             perror("Fork error");
             exit(EXIT_FAILURE);
         }
-
         if (pid == 0) {
-            // Proces potomny: odbieranie wiadomości od serwera
-            receiveFromServer();
+
+            if (receiveFromServer()) {
+                std::cout << "Closing connection...\n";
+                kill(pid, SIGKILL);
+            }
         }
         else {
-            //
-            // 
-            // Proces rodzicielski: wysyłanie wiadomości do serwera
-            //
-            //
             while (true) {
                 std::string input;
                 std::getline(std::cin, input);
 
                 if (input == "exit") {
-                    std::cout << "Kończę połączenie...\n";
-                    kill(pid, SIGKILL); // Zakończ proces potomny
+                    std::cout << "Closing connection...\n";
+                    kill(pid, SIGKILL);
                     break;
                 }
-
                 send(tcp_sock, input.c_str(), input.size(), 0);
             }
-
-            waitpid(pid, nullptr, 0); // Poczekaj na zakończenie procesu potomnego
+            
         }
+
+        waitpid(pid, nullptr, 0);
+
     }
+
 
     ~Client() {
         close(tcp_sock);
@@ -139,7 +167,7 @@ int main() {
     Client client;
 
     std::string nickname;
-    std::cout << "Podaj swój nickname: ";
+    std::cout << "Enter your nickname:\n";
     std::getline(std::cin, nickname);
 
     client.sendNickname(nickname);
