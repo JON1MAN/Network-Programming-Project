@@ -13,6 +13,7 @@ class Ranking {
         std::vector<int> loses;
         std::vector<int> draws;
         std::vector<int> points;
+        std::vector<int> games;
         std::vector<bool> isConnected;
         std::vector<float> winRatio;
     public:
@@ -38,6 +39,7 @@ class Ranking {
                 points.push_back(0);
                 winRatio.push_back(0);
                 isConnected.push_back(1);
+                games.push_back(0);
                 return 0;
             }
             else {
@@ -104,8 +106,9 @@ class Ranking {
         void updateRanks() {
             for (int i = 0; i < nicknames.size();i++) {
                 points[i] = wins[i] * 3 + draws[i];
-                if (loses[i] > 0) {
-                    winRatio[i] = wins[i] / (loses[i]+draws[i]+wins[i]);
+                games[i] = wins[i] + loses[i] + draws[i];
+                if (games[i] > 0) {
+                    winRatio[i] = (wins[i] / games[i]) * 100;
                 }
             }
         }
@@ -113,10 +116,12 @@ class Ranking {
         std::string printRanking() {
             std::string printed;
             printed += "\nRanking:\n";
-            printed += "Nick: \t\t\tWins: \tLoses: \tDraws: \tPoints: \tWinRatio:\n";
+            printed += "Nick: \t\t\tGames:\t\tWins: \tLoses: \tDraws: \tPoints: \tWinRatio:\n";
             for (int i = 0; i < nicknames.size();i++) {
                 printed += nicknames.at(i);
                 printed += "\t\t\t";
+                printed += std::to_string(games.at(i));
+                printed += "\t\t";
                 printed += std::to_string(wins.at(i));
                 printed += "\t";
                 printed += std::to_string(loses.at(i));
